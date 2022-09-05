@@ -1,0 +1,235 @@
+package com.medplus.tourmanagement.service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.medplus.tourmanagement.dao.CustomerInfoDao;
+import com.medplus.tourmanagement.dao.PackageBookingsDao;
+import com.medplus.tourmanagement.dao.TourInformationDao;
+import com.medplus.tourmanagement.dto.CustomerInfoDto;
+import com.medplus.tourmanagement.dto.PackageBookingsDto;
+import com.medplus.tourmanagement.dto.PackageBookingsForStaffDto;
+import com.medplus.tourmanagement.dto.TourInformationDto;
+import com.medplus.tourmanagement.entities.CustomerInfo;
+import com.medplus.tourmanagement.entities.PackageBookings;
+import com.medplus.tourmanagement.entities.TourInformation;
+import com.medplus.tourmanagement.exceptions.CustomerDoesNotExistException;
+import com.medplus.tourmanagement.exceptions.EmptyPackageBookingsListException;
+import com.medplus.tourmanagement.exceptions.PackageBookingDoesNotExistException;
+import com.medplus.tourmanagement.exceptions.TourInformationDoesNotExistException;
+
+@Service
+public class PackageBookingsServiceImpl implements PackageBookingsService {
+
+	@Autowired
+	PackageBookingsDao packageBookingsDao;
+
+	@Autowired
+	CustomerInfoDao customerInfoDao;
+
+	@Autowired
+	TourInformationDao tourInformationDao;
+
+	@Override
+	public PackageBookings addPackageBookings(PackageBookingsDto packageBookingsDto) {
+		List<PackageBookings> packageBookingsList = packageBookingsDao.findAll();
+		int bookingsId = 0;
+		if (packageBookingsList.isEmpty())
+			bookingsId = 5500;
+		else {
+			bookingsId = packageBookingsDao.getMaxBookingId();
+			bookingsId++;
+		}
+		PackageBookings packageBookings = new PackageBookings();
+		Optional<CustomerInfo> customerInfo = customerInfoDao.findById(packageBookingsDto.getCustomerId());
+		if (customerInfo.isEmpty())
+			throw new CustomerDoesNotExistException();
+		Optional<TourInformation> tourInformation = tourInformationDao.findById(packageBookingsDto.getTourInfoId());
+		if (tourInformation.isEmpty())
+			throw new TourInformationDoesNotExistException();
+		packageBookings.setBookingId(bookingsId);
+		packageBookings.setCustomerInfo(customerInfo.get());
+		packageBookings.setTourInformation(tourInformation.get());
+		packageBookings.setPaymentType(packageBookingsDto.getTypeOfPayment());
+		packageBookings.setTripDate(packageBookingsDto.getTripDate());
+		packageBookings.setPackageCost(packageBookingsDto.getPackageCost());
+		if (packageBookingsDto.getTypeOfPayment().equals("ByCash"))
+			packageBookings.setBookingStatus("Payment Pending");
+		else
+			packageBookings.setBookingStatus("Payment Completed and Processing");
+		return packageBookingsDao.save(packageBookings);
+	}
+
+	@Override
+	public PackageBookings cancelPackageBooking(int bookingId) {
+		Optional<PackageBookings> packageBookings = packageBookingsDao.findById(bookingId);
+		if (packageBookings.isEmpty())
+			throw new PackageBookingDoesNotExistException();
+		packageBookings.get().setBookingStatus("Cancelled");
+		return packageBookingsDao.save(packageBookings.get());
+	}
+
+	@Override
+	public PackageBookings updatePackageStatus(int bookingId, String status) {
+		Optional<PackageBookings> packageBookings = packageBookingsDao.findById(bookingId);
+		if (packageBookings.isEmpty())
+			throw new PackageBookingDoesNotExistException();
+		if (status.equals("Payment Completed and Processing"))
+			packageBookings.get().setBookingStatus("Payment Completed and Processing");
+		if (status.equals("Package Confirmed"))
+			packageBookings.get().setBookingStatus("Package Confirmed");
+		if (status.equals("Tour Completed"))
+			packageBookings.get().setBookingStatus("Tour Completed");
+		if (status.equals("Cancelled"))
+			packageBookings.get().setBookingStatus("Cancelled");
+		return packageBookingsDao.save(packageBookings.get());
+	}
+
+	@Override
+	public PackageBookingsDto getPackageBooking(int bookingId) {
+		Optional<PackageBookings> packageBookings = packageBookingsDao.findById(bookingId);
+		if (packageBookings.isEmpty())
+			throw new PackageBookingDoesNotExistException();
+		PackageBookingsDto packageBookingsDto = new PackageBookingsDto();
+		packageBookingsDto.setCustomerId(packageBookings.get().getCustomerInfo().getCustomerId());
+		packageBookingsDto.setTourInfoId(packageBookings.get().getTourInformation().getTourInfoId());
+		packageBookingsDto.setTypeOfPayment(packageBookings.get().getPaymentType());
+		packageBookingsDto.setTripDate(packageBookings.get().getTripDate());
+		return packageBookingsDto;
+	}
+
+	@Override
+	public List<PackageBookings> getAllPackageBooking(int customerId) {
+		if (customerInfoDao.findById(customerId).isEmpty())
+			throw new CustomerDoesNotExistException();
+		List<PackageBookings> packageBookingsList = packageBookingsDao.getAllPackageBooking(customerId);
+		//List<PackageBookingsDto> packageBookingsDtosList = new ArrayList<>();
+		if (packageBookingsList.isEmpty())
+			throw new EmptyPackageBookingsListException();
+//		for (PackageBookings pb : packageBookingsList) {
+//			PackageBookingsDto packageBookingsDto = new PackageBookingsDto();
+//			packageBookingsDto.setCustomerId(pb.getCustomerInfo().getCustomerId());
+//			packageBookingsDto.setTourInfoId(pb.getTourInformation().getTourInfoId());
+//			packageBookingsDto.setTypeOfPayment(pb.getPaymentType());
+//			packageBookingsDto.setTripDate(pb.getTripDate());
+//			packageBookingsDtosList.add(packageBookingsDto);
+//		}
+		return packageBookingsList;
+	}
+
+	public List<PackageBookingsForStaffDto> getAllPackageBookings() {
+		List<PackageBookings> packageBookingsList = packageBookingsDao.findAll();
+		List<PackageBookingsForStaffDto> packageBookings = new ArrayList<PackageBookingsForStaffDto>();
+		for (PackageBookings packageBooking : packageBookingsList) {
+			PackageBookingsForStaffDto packageBookingsForStaffDto = new PackageBookingsForStaffDto();
+			packageBookingsForStaffDto.setBookingId(packageBooking.getBookingId());
+			packageBookingsForStaffDto.setBookingStatus(packageBooking.getBookingStatus());
+			packageBookingsForStaffDto.setPaymentType(packageBooking.getPaymentType());
+			packageBookingsForStaffDto.setTripDate(packageBooking.getTripDate());
+			packageBookingsForStaffDto.setPackageCost(packageBooking.getPackageCost());
+
+			CustomerInfoDto customerInfoDto = new CustomerInfoDto();
+			customerInfoDto.setCustomerId(packageBooking.getCustomerInfo().getCustomerId());
+			customerInfoDto.setCustomerName(packageBooking.getCustomerInfo().getCustomerName());
+			customerInfoDto.setCustomerAge(packageBooking.getCustomerInfo().getCustomerAge());
+			customerInfoDto.setPhoneNo(packageBooking.getCustomerInfo().getPhoneNo());
+
+			packageBookingsForStaffDto.setCustomerInfoDto(customerInfoDto);
+
+			TourInformationDto tourInformationDto = new TourInformationDto();
+			tourInformationDto.setTourInformationId(packageBooking.getTourInformation().getTourInfoId());
+			tourInformationDto.setLocation(packageBooking.getTourInformation().getLocation());
+			tourInformationDto.setDays(packageBooking.getTourInformation().getDays());
+			tourInformationDto.setTotalCost(packageBooking.getTourInformation().getTotalCost());
+			tourInformationDto.setTourDescription(packageBooking.getTourInformation().getTourDescription());
+			tourInformationDto.setTravelType(packageBooking.getTourInformation().getTravelType());
+
+			packageBookingsForStaffDto.setTourInformationDto(tourInformationDto);
+
+			packageBookings.add(packageBookingsForStaffDto);
+		}
+		return packageBookings;
+	}
+
+	@Override
+	public PackageBookingsForStaffDto getPackageBookingForStaffById(int bookingId) {
+		PackageBookings packageBooking = packageBookingsDao.findById(bookingId).get();
+		PackageBookingsForStaffDto packageBookingsForStaffDto = new PackageBookingsForStaffDto();
+
+		packageBookingsForStaffDto.setBookingId(packageBooking.getBookingId());
+		packageBookingsForStaffDto.setBookingStatus(packageBooking.getBookingStatus());
+		packageBookingsForStaffDto.setPaymentType(packageBooking.getPaymentType());
+		packageBookingsForStaffDto.setTripDate(packageBooking.getTripDate());
+		packageBookingsForStaffDto.setPackageCost(packageBooking.getPackageCost());
+
+		CustomerInfoDto customerInfoDto = new CustomerInfoDto();
+		customerInfoDto.setCustomerId(packageBooking.getCustomerInfo().getCustomerId());
+		customerInfoDto.setCustomerName(packageBooking.getCustomerInfo().getCustomerName());
+		customerInfoDto.setCustomerAge(packageBooking.getCustomerInfo().getCustomerAge());
+		customerInfoDto.setPhoneNo(packageBooking.getCustomerInfo().getPhoneNo());
+
+		packageBookingsForStaffDto.setCustomerInfoDto(customerInfoDto);
+
+		TourInformationDto tourInformationDto = new TourInformationDto();
+		tourInformationDto.setTourInformationId(packageBooking.getTourInformation().getTourInfoId());
+		tourInformationDto.setLocation(packageBooking.getTourInformation().getLocation());
+		tourInformationDto.setDays(packageBooking.getTourInformation().getDays());
+		tourInformationDto.setTotalCost(packageBooking.getTourInformation().getTotalCost());
+		tourInformationDto.setTourDescription(packageBooking.getTourInformation().getTourDescription());
+		tourInformationDto.setTravelType(packageBooking.getTourInformation().getTravelType());
+
+		packageBookingsForStaffDto.setTourInformationDto(tourInformationDto);
+
+		return packageBookingsForStaffDto;
+	}
+
+	public PackageBookingsForStaffDto updatePackageBookingForStaffById(int bookingId) {
+		PackageBookings packageBooking = packageBookingsDao.findById(bookingId).get();
+
+		if (packageBooking.getBookingStatus().equals("Payment Pending")) {
+			packageBooking.setBookingStatus("Payment Completed and Processing");
+		}
+
+		else if (packageBooking.getBookingStatus().equals("Payment Completed and Processing")) {
+			packageBooking.setBookingStatus("Confirmed");
+		}
+
+		else {
+
+		}
+
+		packageBookingsDao.save(packageBooking);
+
+		PackageBookingsForStaffDto packageBookingsForStaffDto = new PackageBookingsForStaffDto();
+
+		packageBookingsForStaffDto.setBookingId(packageBooking.getBookingId());
+		packageBookingsForStaffDto.setBookingStatus(packageBooking.getBookingStatus());
+		packageBookingsForStaffDto.setPaymentType(packageBooking.getPaymentType());
+		packageBookingsForStaffDto.setTripDate(packageBooking.getTripDate());
+		packageBookingsForStaffDto.setPackageCost(packageBooking.getPackageCost());
+		CustomerInfoDto customerInfoDto = new CustomerInfoDto();
+		customerInfoDto.setCustomerId(packageBooking.getCustomerInfo().getCustomerId());
+		customerInfoDto.setCustomerName(packageBooking.getCustomerInfo().getCustomerName());
+		customerInfoDto.setCustomerAge(packageBooking.getCustomerInfo().getCustomerAge());
+		customerInfoDto.setPhoneNo(packageBooking.getCustomerInfo().getPhoneNo());
+
+		packageBookingsForStaffDto.setCustomerInfoDto(customerInfoDto);
+
+		TourInformationDto tourInformationDto = new TourInformationDto();
+		tourInformationDto.setTourInformationId(packageBooking.getTourInformation().getTourInfoId());
+		tourInformationDto.setLocation(packageBooking.getTourInformation().getLocation());
+		tourInformationDto.setDays(packageBooking.getTourInformation().getDays());
+		tourInformationDto.setTotalCost(packageBooking.getTourInformation().getTotalCost());
+		tourInformationDto.setTourDescription(packageBooking.getTourInformation().getTourDescription());
+		tourInformationDto.setTravelType(packageBooking.getTourInformation().getTravelType());
+
+		packageBookingsForStaffDto.setTourInformationDto(tourInformationDto);
+
+		return packageBookingsForStaffDto;
+	}
+
+}

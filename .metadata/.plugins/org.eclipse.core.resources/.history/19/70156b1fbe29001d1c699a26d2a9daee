@@ -1,0 +1,29 @@
+package com.medplus.tourmanagement.test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import com.medplus.tourmanagement.dto.CustomerDependentDto;
+import com.medplus.tourmanagement.exceptions.CustomerDependentDoesNotExistException;
+
+@SpringBootTest
+@TestMethodOrder(OrderAnnotation.class)
+public class CustomerDependentServiceTest {
+
+	@Test
+	@Order(1)
+	void testAddCustomerDependentTrue() {
+		CustomerDependentDto customerDependentDto = new CustomerDependentDto();
+		customerDependentDto.setCustomerId(110001);
+		customerDependentDto.setCustomerDependentAge(30);
+		customerDependentDto.setCustomerDependentName("mohan");
+	}
+
+}

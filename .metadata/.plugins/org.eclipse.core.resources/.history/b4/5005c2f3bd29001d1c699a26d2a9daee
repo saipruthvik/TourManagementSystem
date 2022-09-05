@@ -1,0 +1,154 @@
+package com.medplus.tourmanagement.service;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.medplus.tourmanagement.dao.CustomerDependentDao;
+import com.medplus.tourmanagement.dao.PackageBookingsDao;
+import com.medplus.tourmanagement.dao.TicketReservationDao;
+import com.medplus.tourmanagement.dto.TicketReservationDto;
+import com.medplus.tourmanagement.entities.PackageBookings;
+import com.medplus.tourmanagement.entities.TicketReservation;
+import com.medplus.tourmanagement.exceptions.EmptyPackageBookingsListException;
+import com.medplus.tourmanagement.exceptions.PackageAlreadyBookedException;
+import com.medplus.tourmanagement.exceptions.PackageBookingDoesNotExistException;
+import com.medplus.tourmanagement.exceptions.PackageCancelledException;
+import com.medplus.tourmanagement.exceptions.PackageNotBookedException;
+import com.medplus.tourmanagement.exceptions.PaymentNotCompletedException;
+import com.medplus.tourmanagement.exceptions.TicketReservationAlreadyCancelledException;
+import com.medplus.tourmanagement.exceptions.TicketReservationAlreadyCompletedException;
+import com.medplus.tourmanagement.exceptions.TicketReservationDoesNotExistException;
+import com.medplus.tourmanagement.exceptions.TourCompletedException;
+
+@Service
+public class TicketReservationServiceImpl implements TicketReservationService {
+
+	@Autowired
+	TicketReservationDao ticketReservationDao;
+
+	@Autowired
+	CustomerDependentDao customerDependentDao;
+
+	@Autowired
+	PackageBookingsDao packageBookingsDao;
+
+	@Override
+	public TicketReservationDto addTicketReservation(int bookingId) {
+		List<TicketReservation> ticketReservationsList = ticketReservationDao.findAll();
+		int ticketReservationId = 0;
+		if (ticketReservationsList.isEmpty())
+			ticketReservationId = 1000;
+		else {
+			ticketReservationId = ticketReservationDao.getMaxTicketReservationId();
+			ticketReservationId++;
+		}
+		Optional<PackageBookings> packageBookings = packageBookingsDao.findById(bookingId);
+		if (packageBookings.isEmpty())
+			throw new PackageBookingDoesNotExistException();
+		if (packageBookings.get().getBookingStatus().equals("Cancelled"))
+			throw new PackageCancelledException();
+		if (packageBookings.get().getBookingStatus().equals("Tour Completed"))
+			throw new TourCompletedException();
+		if (packageBookings.get().getBookingStatus().equals("Package Booked"))
+			throw new PackageAlreadyBookedException();
+		if (packageBookings.get().getBookingStatus().equals("Payment Completed and Processing")) {
+			TicketReservation ticketReservation = new TicketReservation();
+			if (ticketReservationDao.getTicketReservationByBookingId(bookingId) != null)
+				throw new TicketReservationAlreadyCompletedException();
+			ticketReservation.setTicketReservationId(ticketReservationId);
+			ticketReservation.setPackageBookings(packageBookings.get());
+			ticketReservation.setReservationStatus("Confirmed");
+			ticketReservation.setArrivingDate(packageBookings.get().getTripDate());
+			Calendar calendar = Calendar.getInstance();
+			calendar.setTime(packageBookings.get().getTripDate());
+			calendar.add(Calendar.DAY_OF_MONTH, packageBookings.get().getTourInformation().getDays());
+			Date date = calendar.getTime();
+			ticketReservation.setDepatureDate(date);
+			TicketReservationDto ticketReservationDto = new TicketReservationDto();
+			ticketReservationDto.setTicketReservationId(ticketReservation.getTicketReservationId());
+			ticketReservationDto.setReservationStatus(ticketReservation.getReservationStatus());
+			ticketReservationDto.setArrivalDate(ticketReservation.getArrivingDate());
+			ticketReservationDto.setDepatureDate(ticketReservation.getDepatureDate());
+			ticketReservationDao.save(ticketReservation);
+			return ticketReservationDto;
+		} else
+			throw new PaymentNotCompletedException();
+	}
+
+	@Override
+	public TicketReservationDto cancelTicketReservation(int ticketReservationId) {
+		Optional<TicketReservation> ticketReservation = ticketReservationDao.findById(ticketReservationId);
+		if (ticketReservation.isEmpty())
+			throw new TicketReservationDoesNotExistException();
+		if (ticketReservation.get().getReservationStatus().equals("Confirmed")) {
+			ticketReservation.get().setReservationStatus("Cancelled");
+			ticketReservationDao.save(ticketReservation.get());
+			TicketReservationDto ticketReservationDto = new TicketReservationDto();
+			ticketReservationDto.setTicketReservationId(ticketReservation.get().getTicketReservationId());
+			ticketReservationDto.setReservationStatus(ticketReservation.get().getReservationStatus());
+			ticketReservationDto.setArrivalDate(ticketReservation.get().getArrivingDate());
+			ticketReservationDto.setDepatureDate(ticketReservation.get().getDepatureDate());
+			return ticketReservationDto;
+		} else
+			throw new TicketReservationAlreadyCancelledException();
+	}
+
+	@Override
+	public TicketReservationDto getTicketReservationStatus(int customerId) {
+		List<PackageBookings> packageBookingsList = packageBookingsDao.getAllPackageBooking(customerId);
+		PackageBookings packageBookings = null;
+		if (packageBookingsList.isEmpty())
+			throw new EmptyPackageBookingsListException();
+		for (PackageBookings pb : packageBookingsList) {
+			if (pb.getBookingStatus().equals("Package Confirmed")) {
+				packageBookings = pb;
+			}
+		}
+		if (packageBookings == null)
+			throw new PackageNotBookedException();
+		TicketReservation ticketReservation = ticketReservationDao
+				.getTicketReservationByBookingId(packageBookings.getBookingId());
+		if (ticketReservation == null)
+			throw new TicketReservationDoesNotExistException();
+		TicketReservationDto ticketReservationDto = new TicketReservationDto();
+		ticketReservationDto.setTicketReservationId(ticketReservation.getTicketReservationId());
+		ticketReservationDto.setReservationStatus(ticketReservation.getReservationStatus());
+		ticketReservationDto.setArrivalDate(ticketReservation.getArrivingDate());
+		ticketReservationDto.setDepatureDate(ticketReservation.getDepatureDate());
+		return ticketReservationDto;
+	}
+
+	@Override
+	public TicketReservationDto getTicketReservationStatuById(int ticketReservationId) {
+		Optional<TicketReservation> ticketReservation = ticketReservationDao.findById(ticketReservationId);
+		if (ticketReservation.isEmpty())
+			throw new TicketReservationDoesNotExistException();
+		TicketReservationDto ticketReservationDto = new TicketReservationDto();
+		ticketReservationDto.setTicketReservationId(ticketReservation.get().getTicketReservationId());
+		ticketReservationDto.setReservationStatus(ticketReservation.get().getReservationStatus());
+		ticketReservationDto.setArrivalDate(ticketReservation.get().getArrivingDate());
+		ticketReservationDto.setDepatureDate(ticketReservation.get().getDepatureDate());
+		return ticketReservationDto;
+	}
+
+	@Override
+	public TicketReservationDto getTicketReservationByBookingId(int bookingId) {
+		TicketReservation ticketReservation = ticketReservationDao.getTicketReservationByBookingId(bookingId);
+		if (ticketReservation == null) {
+			throw new TicketReservationDoesNotExistException();
+		} else {
+			TicketReservationDto ticketReservationDto = new TicketReservationDto();
+			ticketReservationDto.setTicketReservationId(ticketReservation.getTicketReservationId());
+			ticketReservationDto.setReservationStatus(ticketReservation.getReservationStatus());
+			ticketReservationDto.setArrivalDate(ticketReservation.getArrivingDate());
+			ticketReservationDto.setDepatureDate(ticketReservation.getDepatureDate());
+			return ticketReservationDto;
+		}
+	}
+
+}
